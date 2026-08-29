@@ -1,0 +1,84 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find EXE
+        run: |
+          echo "Files in repository:"
+          find . -type f | sort
+
+          EXE=$(find . -type f -iname "*.exe" | head -n 1)
+
+          if [ -z "$EXE" ]; then
+            echo "ERROR: EXE file not found!"
+            exit 1
+          fi
+
+          echo "Found EXE: $EXE"
+          echo "EXE_PATH=$EXE" >> "$GITHUB_ENV"
+
+      - name: Install Wine
+        run: |
+          brew install --cask wine-stable
+
+      - name: Create macOS App
+        run: |
+          mkdir -p "Main.app/Contents/MacOS"
+          mkdir -p "Main.app/Contents/Resources"
+
+          cp "$EXE_PATH" "Main.app/Contents/Resources/main.exe"
+
+          cat > "Main.app/Contents/MacOS/Main" <<'EOF'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+          exec wine "$DIR/main.exe"
+          EOF
+
+          chmod +x "Main.app/Contents/MacOS/Main"
+
+          cat > "Main.app/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>Main</string>
+
+              <key>CFBundleDisplayName</key>
+              <string>Main</string>
+
+              <key>CFBundleIdentifier</key>
+              <string>com.test.main</string>
+
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+
+              <key>CFBundleExecutable</key>
+              <string>Main</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Create ZIP
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "Main.app" "Main-macOS.zip"
+
+      - name: Upload App
+        uses: actions/upload-artifact@v4
+        with:
+          name: Main-macOS
+          path: Main-macOS.zip
