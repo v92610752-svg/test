@@ -1,0 +1,73 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew update
+          brew install --cask wine-stable
+
+      - name: Create macOS App
+        run: |
+          mkdir -p "MyApp.app/Contents/MacOS"
+          mkdir -p "MyApp.app/Contents/Resources"
+
+          cp program.exe "MyApp.app/Contents/Resources/program.exe"
+
+          cat > "MyApp.app/Contents/MacOS/MyApp" <<'EOF'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+          exec wine "$DIR/program.exe"
+          EOF
+
+          chmod +x "MyApp.app/Contents/MacOS/MyApp"
+
+          cat > "MyApp.app/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>MyApp</string>
+
+              <key>CFBundleDisplayName</key>
+              <string>MyApp</string>
+
+              <key>CFBundleIdentifier</key>
+              <string>com.example.myapp</string>
+
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+
+              <key>CFBundleExecutable</key>
+              <string>MyApp</string>
+
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Create ZIP
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "MyApp.app" "MyApp-macOS.zip"
+
+      - name: Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyApp-macOS
+          path: MyApp-macOS.zip
