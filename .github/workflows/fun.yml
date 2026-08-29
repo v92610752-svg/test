@@ -1,0 +1,98 @@
+name: Build Main.app
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Wine
+        run: |
+          brew install --cask wine-stable
+
+      - name: Build Main.app
+        run: |
+          set -e
+
+          rm -rf Main.app
+          mkdir -p "Main.app/Contents/MacOS"
+          mkdir -p "Main.app/Contents/Resources"
+
+          echo "Copying main.exe..."
+          cp "main.exe" "Main.app/Contents/Resources/main.exe"
+
+          echo "Copying Wine..."
+          cp -R "/Applications/Wine Stable.app" \
+            "Main.app/Contents/Resources/Wine Stable.app"
+
+          echo "Creating launcher..."
+
+          cat > "Main.app/Contents/MacOS/Main" <<'EOF'
+          #!/bin/bash
+
+          APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+          WINE="$APP_DIR/Resources/Wine Stable.app/Contents/Resources/wine/bin/wine"
+          EXE="$APP_DIR/Resources/main.exe"
+
+          export WINEPREFIX="$APP_DIR/Resources/WinePrefix"
+          export PATH="$APP_DIR/Resources/Wine Stable.app/Contents/Resources/wine/bin:$PATH"
+
+          "$WINE" wineboot --init >/dev/null 2>&1 || true
+
+          exec "$WINE" "$EXE"
+          EOF
+
+          chmod +x "Main.app/Contents/MacOS/Main"
+
+          cat > "Main.app/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
+          <plist version="1.0">
+          <dict>
+
+              <key>CFBundleName</key>
+              <string>Main</string>
+
+              <key>CFBundleDisplayName</key>
+              <string>Main</string>
+
+              <key>CFBundleIdentifier</key>
+              <string>com.v92610752.main</string>
+
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+
+              <key>CFBundleExecutable</key>
+              <string>Main</string>
+
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+
+          </dict>
+          </plist>
+          EOF
+
+          echo "Checking app contents..."
+          find Main.app -maxdepth 5 -type f | sort
+
+      - name: Create ZIP
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "Main.app" "Main-macOS.zip"
+
+      - name: Upload Main.app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Main-macOS
+          path: Main-macOS.zip
